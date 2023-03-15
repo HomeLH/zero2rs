@@ -1,4 +1,4 @@
-use zero2rs::run;
+use zero2rs::startup::run;
 
 #[tokio::test]
 async fn health_check() {

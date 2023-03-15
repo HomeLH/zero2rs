@@ -1,4 +1,3 @@
-use zero2rs::run; 
 use std::net::TcpListener;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -7,5 +6,5 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
     println!("http://127.0.0.1:{}", port);
-    run(listener)?.await
+    zero2rs::startup::run(listener)?.await
 }
