@@ -1,4 +1,8 @@
+use std::mem::zeroed;
+
+use sqlx::{PgConnection, Connection};
 use zero2rs::startup::run;
+use zero2rs::configuration::get_configuration;
 
 #[tokio::test]
 async fn health_check() {
@@ -25,6 +29,12 @@ fn spawn_app() -> String{
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     let app_address = spawn_app();
+
+    let cfg = get_configuration().expect("fail to read configuration file");
+    let connection_string = cfg.database.connection_database();
+
+    let connection = PgConnection::connect(&connection_string).await.expect("fail to connect to postgres");
+
     let client = reqwest::Client::new();
 
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
