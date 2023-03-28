@@ -1,6 +1,7 @@
-use sqlx::{PgConnection, Connection, PgPool};
+use sqlx::{PgConnection, Connection, PgPool, Executor};
 use zero2rs::startup::run;
-use zero2rs::configuration::{get_configuration, self};
+use zero2rs::configuration::{self, DatabaseSettings};
+use uuid::Uuid;
 
 pub struct TestApp {
     pub address: String,
@@ -22,10 +23,10 @@ async fn health_check() {
 }
 
 async fn spawn_app() -> TestApp{
-    let config = configuration::get_configuration().expect("failed to get configuration");
-    let connection_pool = PgPool::connect(&config.database.connection_database())
-        .await
-        .expect("failed to connect to database");
+    let mut config = configuration::get_configuration().expect("failed to get configuration");
+    config.database.database_name = Uuid::new_v4().to_string();
+
+    let connection_pool = configure_database(&config.database).await;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
     let server =  run(listener, connection_pool.clone()).expect("Failed to bind server");
@@ -36,14 +37,27 @@ async fn spawn_app() -> TestApp{
     }
 }
 
+async fn configure_database(config: &DatabaseSettings) -> PgPool {
+    let mut connection = PgConnection::connect(&config.connection_database_without_db())
+        .await
+        .expect("Failed to connect to database");
+    connection.execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
+        .await
+        .expect("Failed to create database");
+    
+    let connection_pool = PgPool::connect(&config.connection_database())
+       .await
+       .expect("Failed to connect to database");
+    sqlx::migrate!("./migrations")
+        .run(&connection_pool)
+        .await
+        .expect("Failed to migrate");
+    connection_pool
+}
+
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     let app = spawn_app().await;
-
-    let cfg = get_configuration().expect("fail to read configuration file");
-    let connection_string = cfg.database.connection_database();
-
-    let mut connection = PgConnection::connect(&connection_string).await.expect("fail to connect to postgres");
 
     let client = reqwest::Client::new();
 
@@ -58,12 +72,12 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
         .expect("Failed to execute request");
     assert_eq!(200, response.status().as_u16());
     let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
-        .fetch_one(&mut connection)
+        .fetch_one(&app.connection_pool)
         .await
         .expect("Failed to execute request");
 
     assert_eq!(saved.email, "ursula_le_guin@gmail.com");
-    assert_eq!(saved.name, "le_guin");
+    assert_eq!(saved.name, "le guin");
 
 }
 
