@@ -1,12 +1,27 @@
+use once_cell::sync::Lazy;
 use sqlx::{PgConnection, Connection, PgPool, Executor};
 use zero2rs::startup::run;
 use zero2rs::configuration::{self, DatabaseSettings};
+use zero2rs::telemetry::{get_subscriber, init_subscriber};
 use uuid::Uuid;
 
 pub struct TestApp {
     pub address: String,
     pub connection_pool: PgPool,
 }
+static TRACING: Lazy<()> = Lazy::new(|| {
+
+    let default_filter_level = "debug".to_string();
+    let test_name = "test".to_string();
+
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(test_name, default_filter_level, std::io::stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(test_name, default_filter_level, std::io::sink);
+        init_subscriber(subscriber);
+    }
+});
 
 #[tokio::test]
 async fn health_check() {
@@ -23,6 +38,9 @@ async fn health_check() {
 }
 
 async fn spawn_app() -> TestApp{
+
+    Lazy::force(&TRACING);
+
     let mut config = configuration::get_configuration().expect("failed to get configuration");
     config.database.database_name = Uuid::new_v4().to_string();
 
