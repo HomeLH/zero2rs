@@ -1,4 +1,5 @@
 use once_cell::sync::Lazy;
+use secrecy::ExposeSecret;
 use sqlx::{PgConnection, Connection, PgPool, Executor};
 use zero2rs::startup::run;
 use zero2rs::configuration::{self, DatabaseSettings};
@@ -56,14 +57,14 @@ async fn spawn_app() -> TestApp{
 }
 
 async fn configure_database(config: &DatabaseSettings) -> PgPool {
-    let mut connection = PgConnection::connect(&config.connection_database_without_db())
+    let mut connection = PgConnection::connect(&config.connection_database_without_db().expose_secret())
         .await
         .expect("Failed to connect to database");
     connection.execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to create database");
     
-    let connection_pool = PgPool::connect(&config.connection_database())
+    let connection_pool = PgPool::connect(&config.connection_database().expose_secret())
        .await
        .expect("Failed to connect to database");
     sqlx::migrate!("./migrations")

@@ -1,4 +1,5 @@
 use std::{net::TcpListener};
+use secrecy::ExposeSecret;
 use sqlx::PgPool;
 use zero2rs::telemetry::{get_subscriber, init_subscriber};
 
@@ -8,7 +9,7 @@ async fn main() -> std::io::Result<()> {
     init_subscriber(subscriber);
    
     let config = zero2rs::configuration::get_configuration().expect("Fail to read configuration file.");
-    let connection_pool = PgPool::connect(&config.database.connection_database())
+    let connection_pool = PgPool::connect(&config.database.connection_database().expose_secret())
         .await
         .expect("Fail to connect to database");
     let address = format!("127.0.0.1:{}", config.application_port); 
