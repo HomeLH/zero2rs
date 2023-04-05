@@ -27,7 +27,7 @@ jobs:
       run: |
         sudo apt-get install libpq-dev -y
         cargo install --version=0.5.7 sqlx-cli --no-default-features --features postgres
-        SKIP_DOCKER=true ./scripts/init_db.sh
+        SKIP_DOCKER=true ./scripts/init_db_client.sh
     - name: Build
       run: cargo build --verbose
     - name: Run tests
