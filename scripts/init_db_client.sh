@@ -2,7 +2,7 @@ DB_USER=${POSTGRES_USER:=postgres}
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
 DB_NAME="${POSTGRES_DB:=newsletter}"
 DB_PORT="${POSTGRES_PORT:=5432}"
-HOST="192.168.0.119"
+HOST="127.0.0.1"
 
 export PGPASSWORD="${DB_PASSWORD}"
 #until psql -h "${HOST}" -U "${DB_USER}" -p "${DB_PORT}" -d "postgres" -c '\q'; do

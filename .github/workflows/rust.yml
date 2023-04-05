@@ -11,7 +11,6 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     services: 
       postgres:
@@ -21,11 +20,14 @@ jobs:
           POSTGRES_PASSWORD: password
           POSTGRES_DB: newsletter
         ports:
-          - 5432/tcp
-      rust:
-        image: rust
+          - 5432:5432
     steps:
     - uses: actions/checkout@v3
+    - name: Migrate database
+      run: |
+        sudo apt-get install libpq-dev -y
+        cargo install --version=0.2.0 sqlx-cli --no-default-features --features postgres
+        SKIP_DOCKER=true ./scripts/init_db.sh
     - name: Build
       run: cargo build --verbose
     - name: Run tests
