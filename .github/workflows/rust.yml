@@ -22,6 +22,8 @@ jobs:
           POSTGRES_DB: newsletter
         ports:
           - 5432/tcp
+      rust:
+        image: rust
     steps:
     - uses: actions/checkout@v3
     - name: Build
