@@ -3,6 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use chrono::Utc;
 use unicode_segmentation::UnicodeSegmentation;
+use crate::domain::{SubscriberName, NewSubscripber};
 #[derive(serde::Deserialize, Debug)]
 pub struct FormData {
     email: String,
@@ -19,14 +20,15 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
-    if !is_valid_name(&form.name){
-        return HttpResponse::InternalServerError().finish();
-    }
-    match  insert_subscriber(&pool, &form).await
+    let new_subscriber = NewSubscripber{
+        email: form.0.email,
+        name: SubscriberName::parse(form.0.name),
+    };
+    match  insert_subscriber(&pool, &new_subscriber).await
     {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(e) => {
-            tracing::info!("Failed to execute query: {}", e);
+            tracing::info!("Failed to execute query: {:?}", e);
             HttpResponse::InternalServerError().finish()
         }
     }
@@ -41,17 +43,17 @@ pub fn is_valid_name(s: &str) -> bool {
 
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(form, pool)
+    skip(pool, new_subscripber)
 )]
-pub async fn insert_subscriber(pool: &PgPool, form: &web::Form<FormData>) -> Result<(), sqlx::Error> {
+pub async fn insert_subscriber(pool: &PgPool, new_subscripber: &NewSubscripber) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
         VALUES ($1, $2, $3, $4)
         "#,
         Uuid::new_v4(),
-        form.email,
-        form.name,
+        new_subscripber.email,
+        new_subscripber.name.as_ref(),
         Utc::now(),
     )
     .execute(pool)
