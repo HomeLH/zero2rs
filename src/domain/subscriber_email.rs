@@ -40,11 +40,29 @@ impl AsRef<str> for SubscriberEmail {
 mod tests {
     use super::SubscriberEmail;
     use claim::{assert_ok, assert_err};
+    use fake::{faker::internet::en::SafeEmail, Fake};
+
+    #[derive(Debug, Clone)]
+    struct ValidEmailFixtrue(String);
+
+    impl quickcheck::Arbitrary for ValidEmailFixtrue {
+        fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
+            let email = SafeEmail().fake_with_rng(g);
+            Self(email)
+        }
+
+    }
+    #[quickcheck_macros::quickcheck]
+    fn valid_emails_are_parsed_successfully(valid_email: ValidEmailFixtrue) -> bool {
+        // dbg!
+        // dbg!(&valid_email.0);
+        SubscriberEmail::parse(valid_email.0).is_ok()
+    }
 
     #[test]
     fn valid_email() {
-        let email = SubscriberEmail::parse(String::from("example@example.com"));
-        assert_ok!(email);
+        let email = SafeEmail().fake();
+        assert_ok!(SubscriberEmail::parse(email));
     }
 
     #[test]
