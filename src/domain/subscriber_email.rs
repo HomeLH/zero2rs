@@ -1,3 +1,4 @@
+use validator::validate_email;
 #[derive(Debug)]
 pub struct SubscriberEmail(String);
 impl SubscriberEmail {
@@ -18,6 +19,14 @@ impl SubscriberEmail {
             return Err("Invalid email: no domain".to_string());
         }
         Ok(SubscriberEmail(s))
+    }
+    pub fn parse_use_external_library(s: String) -> Result<SubscriberEmail, String> {
+        if !validate_email(&s) {
+            return Err(String::from("Invalid email"));
+        } else {
+            Ok(SubscriberEmail(s))
+        }
+
     }
 }
 
