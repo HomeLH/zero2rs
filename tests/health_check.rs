@@ -106,7 +106,7 @@ async fn subscribe_returns_a_400_when_fields_is_invalid(){
 
     let client = reqwest::Client::new();
 
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let body = "name=le%20guin&email=";
 
     let response = client
         .post(&format!("{}/subscriptions", app.address))

@@ -20,9 +20,16 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
+    // trying to access the data field by using from.0.name instead of from reference
+    let name = match SubscriberName::parse(form.0.name) {
+        Ok(name) => name,
+        Err(_err) => {
+            return HttpResponse::BadRequest().finish();
+        }
+    };
     let new_subscriber = NewSubscripber{
         email: form.0.email,
-        name: SubscriberName::parse(form.0.name).expect("fail to parse name"),
+        name
     };
     match  insert_subscriber(&pool, &new_subscriber).await
     {
