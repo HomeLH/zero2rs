@@ -10,6 +10,22 @@ pub struct FormData {
     name: String
 }
 
+impl TryFrom<web::Form<FormData>> for NewSubscriber {
+    type Error = String;
+    /// Performs the conversion.
+    fn try_from(form: web::Form<FormData>) -> Result<Self, Self::Error> {
+        let name = SubscriberName::parse(form.0.name)?;
+        let email = SubscriberEmail::parse(form.0.email)?;
+        Ok(NewSubscriber { email, name })
+    }
+
+}
+
+pub fn parse_subscriber(form: web::Form<FormData>) -> Result<NewSubscriber, String> {
+    let name = SubscriberName::parse(form.0.name)?;
+    let email = SubscriberEmail::parse(form.0.email)?;
+    Ok(NewSubscriber { email, name })
+}
 // async fn subscribe(_req: HttpRequest) -> HttpResponse {
 #[tracing::instrument(
     name = "Adding a new subscriber",
@@ -20,24 +36,12 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
+    let new_subscriber = match form.try_into() {
+        Ok(s) => s,
+        Err(_) => return HttpResponse::BadRequest().finish(),
+    };
     // trying to access the data field by using from.0.name instead of from reference
-    let name = match SubscriberName::parse(form.0.name) {
-        Ok(name) => name,
-        Err(_err) => {
-            return HttpResponse::BadRequest().finish();
-        }
-    };
-    let email = match SubscriberEmail::parse(form.0.email) {
-        Ok(email) => email,
-        Err(_err) => {
-            return HttpResponse::BadRequest().finish();
-        }
-    };
-    let new_subscriber = NewSubscriber{
-        email,
-        name
-    };
-    match  insert_subscriber(&pool, &new_subscriber).await
+     match  insert_subscriber(&pool, &new_subscriber).await
     {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(e) => {
