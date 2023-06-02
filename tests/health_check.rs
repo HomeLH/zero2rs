@@ -5,6 +5,7 @@ use zero2rs::startup::run;
 use zero2rs::configuration::{self, DatabaseSettings};
 use zero2rs::telemetry::{get_subscriber, init_subscriber};
 use uuid::Uuid;
+use zero2rs::email_client::EmailClient;
 
 pub struct TestApp {
     pub address: String,
@@ -48,7 +49,9 @@ async fn spawn_app() -> TestApp{
     let connection_pool = configure_database(&config.database).await;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
-    let server =  run(listener, connection_pool.clone()).expect("Failed to bind server");
+    let sender_email = config.email_client.sender().expect("invalid email address");
+    let email_client = EmailClient::new(config.email_client.base_url, sender_email);
+    let server =  run(listener, connection_pool.clone(), email_client).expect("Failed to bind server");
     let _ = tokio::spawn(server);
     TestApp {
         address: format!("http://127.0.0.1:{}", port),
