@@ -11,3 +11,4 @@ email_client:
   base_url: "https://api.postmarkapp.com"
   # Use the single sender email you authorised on Postmark!
   sender_email: "something@gmail.com"
+  authorization_token: "1234567890"

@@ -18,6 +18,6 @@ async fn main() -> std::io::Result<()> {
     tracing::info!("server is runing on {}", address);
     let listener = TcpListener::bind(address)?;
     let sender_email = config.email_client.sender().expect("invalid email address");
-    let email_client = EmailClient::new(config.email_client.base_url, sender_email);
+    let email_client = EmailClient::new(config.email_client.base_url, sender_email, config.email_client.authorization_token);
     zero2rs::startup::run(listener, connection_pool, email_client)?.await
 }

@@ -50,7 +50,7 @@ async fn spawn_app() -> TestApp{
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
     let sender_email = config.email_client.sender().expect("invalid email address");
-    let email_client = EmailClient::new(config.email_client.base_url, sender_email);
+    let email_client = EmailClient::new(config.email_client.base_url, sender_email, config.email_client.authorization_token);
     let server =  run(listener, connection_pool.clone(), email_client).expect("Failed to bind server");
     let _ = tokio::spawn(server);
     TestApp {
