@@ -12,3 +12,4 @@ email_client:
   # Use the single sender email you authorised on Postmark!
   sender_email: "something@gmail.com"
   authorization_token: "1234567890"
+  timeout_miliseconds: 3000
