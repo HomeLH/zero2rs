@@ -1,4 +1,3 @@
-
 use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use zero2rs::telemetry::{get_subscriber, init_subscriber};
@@ -9,6 +8,13 @@ use zero2rs::startup::{Application, get_connection_pool};
 pub struct TestApp {
     pub address: String,
     pub connection_pool: PgPool,
+}
+impl TestApp {
+    pub async fn post_subscriptions(&self, body: &str) -> reqwest::Response {
+        let client = reqwest::Client::new();
+        let url = format!("{}/subscriptions", self.address);
+        client.post(&url).header("Content-Type", "application/x-www-form-urlencoded").body(body.to_owned()).send().await.expect("Failed to post")
+    }
 }
 static TRACING: Lazy<()> = Lazy::new(|| {
 
