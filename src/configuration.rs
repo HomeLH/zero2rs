@@ -3,12 +3,14 @@ use secrecy::{Secret, ExposeSecret};
 
 use crate::domain::SubscriberEmail;
 #[derive(serde::Deserialize)]
+#[derive(Clone)]
 pub struct Settings{
     pub database: DatabaseSettings,
     pub application_port: u16,
     pub email_client: EmailClientSettings,
 }
 #[derive(serde::Deserialize)]
+#[derive(Clone)]
 pub struct EmailClientSettings {
     pub base_url: String,
     pub sender_email: String,
@@ -24,6 +26,7 @@ impl EmailClientSettings {
     }
 }
 #[derive(serde::Deserialize)]
+#[derive(Clone)]
 pub struct DatabaseSettings {
     pub username: String,
     pub password: Secret<String>,
@@ -41,6 +44,11 @@ impl DatabaseSettings {
         Secret::new(format!("postgres://{}:{}@{}:{}",
                 self.username, self.password.expose_secret(), self.host, self.port
         ))
+    }
+    pub fn with_db(&self) -> String {
+        format!("postgres://{}:{}@{}:{}/{}",
+                self.username, self.password.expose_secret(), self.host, self.port, self.database_name
+        )
     }
 }
 
