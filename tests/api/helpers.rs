@@ -5,9 +5,11 @@ use uuid::Uuid;
 use zero2rs::configuration::{self, DatabaseSettings};
 use secrecy::ExposeSecret;
 use zero2rs::startup::{Application, get_connection_pool};
+use wiremock::MockServer;
 pub struct TestApp {
     pub address: String,
     pub connection_pool: PgPool,
+    pub email_server: MockServer,
 }
 impl TestApp {
     pub async fn post_subscriptions(&self, body: &str) -> reqwest::Response {
@@ -33,11 +35,13 @@ pub async fn spawn_app() -> TestApp{
 
     Lazy::force(&TRACING);
 
+    let email_server = MockServer::start().await;
 
     let configuration = {
         let mut c = configuration::get_configuration().expect("failed to get configuration");
         c.database.database_name = Uuid::new_v4().to_string();
         c.application_port = 0;
+        c.email_client.base_url = email_server.uri();
         c
     };
 
@@ -48,6 +52,7 @@ pub async fn spawn_app() -> TestApp{
     TestApp {
         address,
         connection_pool: get_connection_pool(&configuration.database),
+        email_server,
     }
 }
 async fn configure_database(config: &DatabaseSettings) -> PgPool {

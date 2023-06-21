@@ -8,7 +8,8 @@ database:
   database_name: "newsletter"
 email_client:
   # Value retrieved from Postmark's API documentation
-  base_url: "https://api.postmarkapp.com"
+  # base_url: "https://api.postmarkapp.com"
+  base_url: "http://localhost"
   # Use the single sender email you authorised on Postmark!
   sender_email: "something@gmail.com"
   authorization_token: "1234567890"

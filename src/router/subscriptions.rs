@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use chrono::Utc;
 use unicode_segmentation::UnicodeSegmentation;
-use crate::domain::{SubscriberName, NewSubscriber, SubscriberEmail};
+use crate::{domain::{SubscriberName, NewSubscriber, SubscriberEmail}, email_client::{EmailClient}};
 #[derive(serde::Deserialize, Debug)]
 pub struct FormData {
     email: String,
@@ -29,13 +29,13 @@ pub fn parse_subscriber(form: web::Form<FormData>) -> Result<NewSubscriber, Stri
 // async fn subscribe(_req: HttpRequest) -> HttpResponse {
 #[tracing::instrument(
     name = "Adding a new subscriber",
-    skip(form, pool),
+    skip(form, pool, email_client),
     fields(
         subscriber_email = %form.email,
         subscriber_name = %form.name
     )
 )]
-pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
+pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>, email_client: web::Data<EmailClient>) -> HttpResponse {
     let new_subscriber = match form.try_into() {
         Ok(s) => s,
         Err(_) => return HttpResponse::BadRequest().finish(),
@@ -43,7 +43,13 @@ pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> Ht
     // trying to access the data field by using from.0.name instead of from reference
      match  insert_subscriber(&pool, &new_subscriber).await
     {
-        Ok(_) => HttpResponse::Ok().finish(),
+        Ok(_) => {
+            // todo uuid for confirmed link
+            if email_client.send_email(new_subscriber.email, "Welcome", "Welcome to our newsletter", "welcome to ournewsletter").await.is_err() {
+                return HttpResponse::InternalServerError().finish();
+            }
+            return HttpResponse::Ok().finish();
+        }
         Err(e) => {
             tracing::info!("Failed to execute query: {:?}", e);
             HttpResponse::InternalServerError().finish()
@@ -65,8 +71,8 @@ pub fn is_valid_name(s: &str) -> bool {
 pub async fn insert_subscriber(pool: &PgPool, new_subscripber: &NewSubscriber) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
-        INSERT INTO subscriptions (id, email, name, subscribed_at)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO subscriptions (id, email, name, subscribed_at, status)
+        VALUES ($1, $2, $3, $4, 'confirmed')
         "#,
         Uuid::new_v4(),
         new_subscripber.email.as_ref(),
