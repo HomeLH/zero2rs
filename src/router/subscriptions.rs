@@ -43,9 +43,10 @@ pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>, email
     // trying to access the data field by using from.0.name instead of from reference
      match  insert_subscriber(&pool, &new_subscriber).await
     {
-        Ok(_) => {
-            // todo uuid for confirmed link
-            if email_client.send_email(new_subscriber.email, "Welcome", "Welcome to our newsletter", "welcome to ournewsletter").await.is_err() {
+        Ok(_) => {            
+            if send_confirmation_email(email_client, new_subscriber)
+            .await
+            .is_err() {
                 return HttpResponse::InternalServerError().finish();
             }
             return HttpResponse::Ok().finish();
@@ -86,4 +87,19 @@ pub async fn insert_subscriber(pool: &PgPool, new_subscripber: &NewSubscriber) -
         e
     })?;
     Ok(())
+}
+
+pub async fn send_confirmation_email(
+    email_client: web::Data<EmailClient>,
+    new_subscripber: NewSubscriber,
+)-> Result<(), reqwest::Error>{
+    let confirmation_link = format!("{}/subscriptions/confirm?subscription_token={}", "https://my-api.com", Uuid::new_v4());
+    // todo uuid for confirmed link
+    email_client.send_email(
+        new_subscripber.email,
+        "Welcome", 
+        &format!("welcome to our newsletter! <br /> Click <a href=\"{}\">here</a> to confirm your subscription.", confirmation_link),
+        &format!("welcome to our newsletter! \n Visit {} to confirm your subscription.", confirmation_link)
+    )
+    .await
 }
