@@ -1,11 +1,16 @@
 use once_cell::sync::Lazy;
-use sqlx::{Connection, Executor, PgConnection, PgPool};
-use zero2rs::telemetry::{get_subscriber, init_subscriber};
-use uuid::Uuid;
-use zero2rs::configuration::{self, DatabaseSettings};
 use secrecy::ExposeSecret;
-use zero2rs::startup::{Application, get_connection_pool};
+use sqlx::{Connection, Executor, PgConnection, PgPool};
+use uuid::Uuid;
 use wiremock::MockServer;
+use zero2rs::configuration::{self, DatabaseSettings};
+use zero2rs::startup::{get_connection_pool, Application};
+use zero2rs::telemetry::{get_subscriber, init_subscriber};
+
+pub struct ConfirmationLinks {
+    pub html: reqwest::Url,
+    pub plain_text: reqwest::Url,
+}
 pub struct TestApp {
     pub address: String,
     pub connection_pool: PgPool,
@@ -16,11 +21,39 @@ impl TestApp {
     pub async fn post_subscriptions(&self, body: &str) -> reqwest::Response {
         let client = reqwest::Client::new();
         let url = format!("{}/subscriptions", self.address);
-        client.post(&url).header("Content-Type", "application/x-www-form-urlencoded").body(body.to_owned()).send().await.expect("Failed to post")
+        client
+            .post(&url)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body.to_owned())
+            .send()
+            .await
+            .expect("Failed to post")
+    }
+    pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {
+        let body = serde_json::from_slice::<serde_json::Value>(&email_request.body).unwrap();
+
+        let get_link = |s: &str| {
+            let links: Vec<_> = linkify::LinkFinder::new()
+                .links(s)
+                .filter(|l| *l.kind() == linkify::LinkKind::Url)
+                .collect();
+            assert_eq!(links.len(), 1);
+            let raw_link = links[0].as_str().to_owned();
+            let mut confirmation_link = reqwest::Url::parse(&raw_link).unwrap();
+            confirmation_link
+                .set_port(Some(self.port))
+                .expect("Failed to set port");
+            confirmation_link
+        };
+        let html_link = get_link(&body["HtmlContent"].as_str().unwrap());
+        let plain_link = get_link(&body["TextContent"].as_str().unwrap());
+        ConfirmationLinks {
+            html: html_link,
+            plain_text: plain_link,
+        }
     }
 }
 static TRACING: Lazy<()> = Lazy::new(|| {
-
     let default_filter_level = "debug".to_string();
     let test_name = "test".to_string();
 
@@ -32,8 +65,7 @@ static TRACING: Lazy<()> = Lazy::new(|| {
         init_subscriber(subscriber);
     }
 });
-pub async fn spawn_app() -> TestApp{
-
+pub async fn spawn_app() -> TestApp {
     Lazy::force(&TRACING);
 
     let email_server = MockServer::start().await;
@@ -47,7 +79,9 @@ pub async fn spawn_app() -> TestApp{
     };
 
     configure_database(&configuration.database).await;
-    let app = Application::build(configuration.clone()).await.expect("Failed to build app");
+    let app = Application::build(configuration.clone())
+        .await
+        .expect("Failed to build app");
     let address = format!("http://127.0.0.1:{}", app.port());
     let application_port = app.port();
     let _ = tokio::spawn(app.run_until_stopped());
@@ -59,16 +93,18 @@ pub async fn spawn_app() -> TestApp{
     }
 }
 async fn configure_database(config: &DatabaseSettings) -> PgPool {
-    let mut connection = PgConnection::connect(&config.connection_database_without_db().expose_secret())
-        .await
-        .expect("Failed to connect to database");
-    connection.execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
+    let mut connection =
+        PgConnection::connect(&config.connection_database_without_db().expose_secret())
+            .await
+            .expect("Failed to connect to database");
+    connection
+        .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to create database");
-    
+
     let connection_pool = PgPool::connect(&config.connection_database().expose_secret())
-       .await
-       .expect("Failed to connect to database");
+        .await
+        .expect("Failed to connect to database");
     sqlx::migrate!("./migrations")
         .run(&connection_pool)
         .await
