@@ -1,7 +1,8 @@
 use actix_web::{web, HttpResponse};
-use sqlx::PgPool;
+use sqlx::{PgPool, Transaction, Postgres};
 use uuid::Uuid;
 use chrono::Utc;
+use rand::{thread_rng, Rng};
 use unicode_segmentation::UnicodeSegmentation;
 use crate::{domain::{SubscriberName, NewSubscriber, SubscriberEmail}, email_client::{EmailClient}, startup::ApplicationBaseUrl};
 #[derive(serde::Deserialize, Debug)]
@@ -41,22 +42,41 @@ pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>, email
         Ok(s) => s,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
-    // trying to access the data field by using from.0.name instead of from reference
-     match  insert_subscriber(&pool, &new_subscriber).await
-    {
-        Ok(_) => {            
-            if send_confirmation_email(email_client, new_subscriber, &base_url.0)
-            .await
-            .is_err() {
-                return HttpResponse::InternalServerError().finish();
-            }
-            return HttpResponse::Ok().finish();
-        }
+
+    let mut transaction = match pool.begin().await {
+        Ok(t) => t,
         Err(e) => {
-            tracing::info!("Failed to execute query: {:?}", e);
-            HttpResponse::InternalServerError().finish()
+            tracing::error!("Failed to create transaction: {:?}", e);
+            return HttpResponse::InternalServerError().finish();
         }
+    };
+
+    // trying to access the data field by using from.0.name instead of from reference
+    let subscriber_id =  match  insert_subscriber(&mut transaction, &new_subscriber).await {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::error!("Failed to execute query: {:?}", e);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let subscription_token = generate_subscription_token();
+
+    if store_token(&mut transaction, subscriber_id, &subscription_token).await
+    .is_err() {
+        return HttpResponse::InternalServerError().finish();
+    };
+
+    if send_confirmation_email(email_client, new_subscriber, &base_url.0, &subscription_token)
+    .await
+    .is_err() {
+        return HttpResponse::InternalServerError().finish();
     }
+
+    if transaction.commit().await.is_err() {
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    HttpResponse::Ok().finish()
 }
 pub fn is_valid_name(s: &str) -> bool {
     let is_empty_or_whitespace =  s.trim().is_empty();
@@ -68,34 +88,39 @@ pub fn is_valid_name(s: &str) -> bool {
 
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(pool, new_subscripber)
+    skip(transaction, new_subscripber)
 )]
-pub async fn insert_subscriber(pool: &PgPool, new_subscripber: &NewSubscriber) -> Result<(), sqlx::Error> {
+pub async fn insert_subscriber(transaction: &mut Transaction<'_, Postgres>, new_subscripber: &NewSubscriber) -> Result<Uuid, sqlx::Error> {
+    let uid = Uuid::new_v4();
     sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at, status)
         VALUES ($1, $2, $3, $4, 'pending_confirmation')
         "#,
-        Uuid::new_v4(),
+        uid,
         new_subscripber.email.as_ref(),
         new_subscripber.name.as_ref(),
         Utc::now(),
     )
-    .execute(pool)
+    .execute(transaction)
     .await
     .map_err(|e| {
         tracing::error!("Failed to execute query: {:?}", e);
         e
     })?;
-    Ok(())
+    Ok(uid)
 }
-
+#[tracing::instrument(
+    name = "Sending confirmation email",
+    skip(email_client, new_subscripber, base_url, subscription_token),
+)]
 pub async fn send_confirmation_email(
     email_client: web::Data<EmailClient>,
     new_subscripber: NewSubscriber,
     base_url: &str,
+    subscription_token: &str,
 )-> Result<(), reqwest::Error>{
-    let confirmation_link = format!("{}/subscriptions/confirm?subscription_token={}", base_url, Uuid::new_v4());
+    let confirmation_link = format!("{}/subscriptions/confirm?subscription_token={}", base_url, subscription_token);
     // todo uuid for confirmed link
     email_client.send_email(
         new_subscripber.email,
@@ -104,4 +129,32 @@ pub async fn send_confirmation_email(
         &format!("welcome to our newsletter! \n Visit {} to confirm your subscription.", confirmation_link)
     )
     .await
+}
+
+fn generate_subscription_token() -> String {
+    let mut rng = thread_rng();
+    let token: String = std::iter::repeat(())
+        .map(|()| rng.sample(rand::distributions::Alphanumeric))
+        .map(char::from)
+        .take(25)
+        .collect();
+    token
+}
+
+async fn store_token(transaction: &mut Transaction<'_, Postgres>, subscriber_id: Uuid, subscription_token: &str) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO subscriptions_token (subscriptions_token, subscription_id)
+        VALUES ($1, $2)
+        "#,
+        subscription_token,
+        subscriber_id,
+    )
+    .execute(transaction)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to execute query: {:?}", e);
+        e
+    })?;
+    Ok(())
 }
