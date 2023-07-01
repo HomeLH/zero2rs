@@ -9,6 +9,7 @@ use wiremock::MockServer;
 pub struct TestApp {
     pub address: String,
     pub connection_pool: PgPool,
+    pub port: u16,
     pub email_server: MockServer,
 }
 impl TestApp {
@@ -40,7 +41,7 @@ pub async fn spawn_app() -> TestApp{
     let configuration = {
         let mut c = configuration::get_configuration().expect("failed to get configuration");
         c.database.database_name = Uuid::new_v4().to_string();
-        c.application_port = 0;
+        c.application.port = 0;
         c.email_client.base_url = email_server.uri();
         c
     };
@@ -48,10 +49,12 @@ pub async fn spawn_app() -> TestApp{
     configure_database(&configuration.database).await;
     let app = Application::build(configuration.clone()).await.expect("Failed to build app");
     let address = format!("http://127.0.0.1:{}", app.port());
+    let application_port = app.port();
     let _ = tokio::spawn(app.run_until_stopped());
     TestApp {
         address,
         connection_pool: get_connection_pool(&configuration.database),
+        port: application_port,
         email_server,
     }
 }

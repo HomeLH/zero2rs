@@ -6,7 +6,7 @@ use crate::domain::SubscriberEmail;
 #[derive(Clone)]
 pub struct Settings{
     pub database: DatabaseSettings,
-    pub application_port: u16,
+    pub application: ApplicationSettings,
     pub email_client: EmailClientSettings,
 }
 #[derive(serde::Deserialize)]
@@ -56,4 +56,12 @@ pub fn get_configuration() -> Result<Settings, ConfigError> {
     let mut settings = config::Config::default();
     settings.merge(config::File::with_name("configuration"))?;
     settings.try_into()
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct ApplicationSettings {
+    #[serde(deserialize_with = "serde_aux::deserialize_number_from_string")]
+    pub port: u16,
+    pub host: String,
+    pub base_url: String,
 }

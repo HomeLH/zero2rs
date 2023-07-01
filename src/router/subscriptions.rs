@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use chrono::Utc;
 use unicode_segmentation::UnicodeSegmentation;
-use crate::{domain::{SubscriberName, NewSubscriber, SubscriberEmail}, email_client::{EmailClient}};
+use crate::{domain::{SubscriberName, NewSubscriber, SubscriberEmail}, email_client::{EmailClient}, startup::ApplicationBaseUrl};
 #[derive(serde::Deserialize, Debug)]
 pub struct FormData {
     email: String,
@@ -29,13 +29,14 @@ pub fn parse_subscriber(form: web::Form<FormData>) -> Result<NewSubscriber, Stri
 // async fn subscribe(_req: HttpRequest) -> HttpResponse {
 #[tracing::instrument(
     name = "Adding a new subscriber",
-    skip(form, pool, email_client),
+    skip(form, pool, email_client, base_url),
     fields(
         subscriber_email = %form.email,
         subscriber_name = %form.name
     )
 )]
-pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>, email_client: web::Data<EmailClient>) -> HttpResponse {
+pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>, email_client: web::Data<EmailClient>
+    , base_url: web::Data<ApplicationBaseUrl>) -> HttpResponse {
     let new_subscriber = match form.try_into() {
         Ok(s) => s,
         Err(_) => return HttpResponse::BadRequest().finish(),
@@ -44,7 +45,7 @@ pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>, email
      match  insert_subscriber(&pool, &new_subscriber).await
     {
         Ok(_) => {            
-            if send_confirmation_email(email_client, new_subscriber)
+            if send_confirmation_email(email_client, new_subscriber, &base_url.0)
             .await
             .is_err() {
                 return HttpResponse::InternalServerError().finish();
@@ -92,8 +93,9 @@ pub async fn insert_subscriber(pool: &PgPool, new_subscripber: &NewSubscriber) -
 pub async fn send_confirmation_email(
     email_client: web::Data<EmailClient>,
     new_subscripber: NewSubscriber,
+    base_url: &str,
 )-> Result<(), reqwest::Error>{
-    let confirmation_link = format!("{}/subscriptions/confirm?subscription_token={}", "https://my-api.com", Uuid::new_v4());
+    let confirmation_link = format!("{}/subscriptions/confirm?subscription_token={}", base_url, Uuid::new_v4());
     // todo uuid for confirmed link
     email_client.send_email(
         new_subscripber.email,

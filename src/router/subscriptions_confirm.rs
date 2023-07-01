@@ -2,7 +2,7 @@ use actix_web::{HttpResponse, web::Query};
 
 #[derive(serde::Deserialize)]
 pub struct Parameters {
-    subscriber_token: String,
+    subscription_token: String,
 }
 
 #[tracing::instrument(
