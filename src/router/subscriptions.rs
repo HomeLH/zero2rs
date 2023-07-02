@@ -1,10 +1,48 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpResponse, ResponseError};
+use anyhow::Context;
 use sqlx::{PgPool, Transaction, Postgres};
 use uuid::Uuid;
 use chrono::Utc;
 use rand::{thread_rng, Rng};
 use unicode_segmentation::UnicodeSegmentation;
 use crate::{domain::{SubscriberName, NewSubscriber, SubscriberEmail}, email_client::{EmailClient}, startup::ApplicationBaseUrl};
+
+#[derive(thiserror::Error)]
+pub enum SubscribeError {
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+    #[error("{0}")]
+    ValidationError(String),
+}
+impl std::fmt::Debug for SubscribeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        error_chain_fmt(self, f)
+    }
+}
+
+fn error_chain_fmt(e: &impl std::error::Error, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    //iterate over the cause chain
+    writeln!(f, "{}", e)?;
+    let mut e = e.source();
+    while let Some(cause) = e {
+        writeln!(f, "caused by: {}", cause)?;
+        e = cause.source();
+    }
+    Ok(())
+}
+
+impl ResponseError for SubscribeError {
+    fn status_code(&self) -> actix_web::http::StatusCode {
+        match self {
+            SubscribeError::ValidationError(_) => actix_web::http::StatusCode::BAD_REQUEST,
+            SubscribeError::UnexpectedError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::new(self.status_code())
+    }
+} 
+
 #[derive(serde::Deserialize, Debug)]
 pub struct FormData {
     email: String,
@@ -37,46 +75,32 @@ pub fn parse_subscriber(form: web::Form<FormData>) -> Result<NewSubscriber, Stri
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>, email_client: web::Data<EmailClient>
-    , base_url: web::Data<ApplicationBaseUrl>) -> HttpResponse {
-    let new_subscriber = match form.try_into() {
-        Ok(s) => s,
-        Err(_) => return HttpResponse::BadRequest().finish(),
-    };
-
-    let mut transaction = match pool.begin().await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!("Failed to create transaction: {:?}", e);
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    , base_url: web::Data<ApplicationBaseUrl>) -> Result<HttpResponse, SubscribeError> {
+    let new_subscriber = form.try_into().map_err(|e| SubscribeError::ValidationError(e))?; 
+    let mut transaction =  pool.begin()
+        .await
+        .context("Failed to acquire a Postgres connection from the pool")?;
 
     // trying to access the data field by using from.0.name instead of from reference
-    let subscriber_id =  match  insert_subscriber(&mut transaction, &new_subscriber).await {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::error!("Failed to execute query: {:?}", e);
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let subscriber_id =  insert_subscriber(&mut transaction, &new_subscriber)
+    .await
+    .context("Failed to insert new subscriber in the database")?;
     let subscription_token = generate_subscription_token();
 
-    if store_token(&mut transaction, subscriber_id, &subscription_token).await
-    .is_err() {
-        return HttpResponse::InternalServerError().finish();
-    };
-
-    if send_confirmation_email(email_client, new_subscriber, &base_url.0, &subscription_token)
+    store_token(&mut transaction, subscriber_id, &subscription_token)
     .await
-    .is_err() {
-        return HttpResponse::InternalServerError().finish();
-    }
+    .context("Failed to store subscription token in the database")?;
 
-    if transaction.commit().await.is_err() {
-        return HttpResponse::InternalServerError().finish();
-    }
+    send_confirmation_email(email_client, new_subscriber, &base_url.0, &subscription_token)
+    .await
+    .context("Failed to send confirmation email")?;
+    
 
-    HttpResponse::Ok().finish()
+    transaction.commit()
+    .await
+    .context("Failed to commit SQL transaction")?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 pub fn is_valid_name(s: &str) -> bool {
     let is_empty_or_whitespace =  s.trim().is_empty();
