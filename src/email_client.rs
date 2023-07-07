@@ -18,7 +18,7 @@ impl EmailClient {
     }
     pub async fn send_email(
         &self,
-        recipient: SubscriberEmail,
+        recipient: &SubscriberEmail,
         subject: &str,
         html_content: &str,
         text_content: &str,
@@ -111,7 +111,7 @@ mod tests {
             .await;
 
         //act 
-        let _ = email_client(mock_server.uri()).send_email(email(), &subject(), &content(), &content()).await;
+        let _ = email_client(mock_server.uri()).send_email(&email(), &subject(), &content(), &content()).await;
     }
     //  server returns 200 if sending email is successful
     #[tokio::test]
@@ -125,7 +125,7 @@ mod tests {
             .await;
 
         //act 
-        let result = email_client(mock_server.uri()).send_email(email(), &subject(), &content(), &content()).await;
+        let result = email_client(mock_server.uri()).send_email(&email(), &subject(), &content(), &content()).await;
         //assert
         assert_ok!(result);
     }
@@ -141,7 +141,7 @@ mod tests {
             .await;
 
         //act 
-        let result = email_client(mock_server.uri()).send_email(email(), &subject(), &content(), &content()).await;
+        let result = email_client(mock_server.uri()).send_email(&email(), &subject(), &content(), &content()).await;
         //assert
         assert_err!(result);
     }
@@ -157,7 +157,7 @@ mod tests {
             .await;
 
         //act 
-        let result = email_client(mock_server.uri()).send_email(email(), &subject(), &content(), &content()).await;
+        let result = email_client(mock_server.uri()).send_email(&email(), &subject(), &content(), &content()).await;
         //assert
         assert_err!(result);
     }

@@ -20,7 +20,7 @@ impl std::fmt::Debug for SubscribeError {
     }
 }
 
-fn error_chain_fmt(e: &impl std::error::Error, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+pub fn error_chain_fmt(e: &impl std::error::Error, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     //iterate over the cause chain
     writeln!(f, "{}", e)?;
     let mut e = e.source();
@@ -147,7 +147,7 @@ pub async fn send_confirmation_email(
     let confirmation_link = format!("{}/subscriptions/confirm?subscription_token={}", base_url, subscription_token);
     // todo uuid for confirmed link
     email_client.send_email(
-        new_subscripber.email,
+        &new_subscripber.email,
         "Welcome", 
         &format!("welcome to our newsletter! <br /> Click <a href=\"{}\">here</a> to confirm your subscription.", confirmation_link),
         &format!("welcome to our newsletter! \n Visit {} to confirm your subscription.", confirmation_link)

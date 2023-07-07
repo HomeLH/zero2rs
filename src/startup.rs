@@ -1,9 +1,7 @@
 use crate::configuration::DatabaseSettings;
 use crate::configuration::Settings;
 use crate::email_client::EmailClient;
-use crate::router::health_check;
-use crate::router::subscribe;
-use crate::router::confirm;
+use crate::router::{health_check, publish_newsletter, subscribe, confirm};
 use actix_web::{dev::Server, web, App, HttpServer};
 use secrecy::ExposeSecret;
 use sqlx::PgPool;
@@ -66,6 +64,7 @@ pub fn run(
             .route("/healthcheck", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
+            .route("/newsletter", web::post().to(publish_newsletter))
             .app_data(pool.clone())
             .app_data(email_client.clone())
             .app_data(base_url.clone())

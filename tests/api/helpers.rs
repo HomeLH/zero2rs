@@ -52,6 +52,13 @@ impl TestApp {
             plain_text: plain_link,
         }
     }
+    // post_newsletters, para: &self, body: json
+    pub async fn post_newsletters(&self, body: &serde_json::Value) -> reqwest::Response {
+        let client = reqwest::Client::new();
+        let url = format!("{}/newsletters", self.address);
+        client.post(&url).json(&body).send().await.unwrap()
+    }
+
 }
 static TRACING: Lazy<()> = Lazy::new(|| {
     let default_filter_level = "debug".to_string();
