@@ -122,3 +122,36 @@ pub async fn newsletter_return_400_for_invalid_data() {
         );
     }
 }
+
+#[tokio::test]
+async fn newsletters_returns_401_when_not_authenticated() {
+    let app = spawn_app().await;
+
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "content": {
+            "text": "Newsletter content",
+            "html": "<p>Newsletter content</p>",
+        }
+    });
+    // we don't need to mock response for newsletter api
+    // because we don't need to send email in newsletter api.
+    // so we don't need to mock response for external api.
+    // response for newsletter api
+    // Mock::given(path("/email"))
+    //     .and(matcher::method("POST"))
+    //     .respond_with(ResponseTemplate::new(200))
+    //     .expect(1)
+    //     .mount(&app.email_server)
+    //     .await;
+
+    let response = reqwest::Client::new()
+        .post(&format!("{}/newsletters", &app.address))
+        .json(&newsletter_request_body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status().as_u16(), 401);
+    assert_eq!(response.headers()["WWW-Authenticate"],r#"Basic realm="publish""#, );
+}

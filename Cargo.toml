@@ -28,6 +28,7 @@ rand = {version = "0.8", features = ["std_rng"]}
 serde-aux = "0.3.0"
 thiserror = "1"
 anyhow = "1"
+base64 = "0.13"
 
 [dependencies.sqlx]
 version = "0.5.7"
